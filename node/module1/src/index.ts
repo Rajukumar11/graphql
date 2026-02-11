@@ -1,5 +1,9 @@
 import {ApolloServer} from "@apollo/server";
-import {startStandaloneServer} from '@apollo/server/standalone';
+import { expressMiddleware } from "@as-integrations/express5";
+import express, { Request } from 'express';
+import cors from "cors";
+import bodyParser from "body-parser";
+
 
 
 const typeDefs = `#graphql
@@ -17,16 +21,32 @@ const resolvers = {
     }
 }
 
-async function bootStrap(){
+async function start(){
     const server = new ApolloServer({typeDefs,resolvers});
+    const app = express();
+    app.use(cors())
+    app.use(bodyParser.json())
+    await server.start();
+    app.use("/graphql",
+        (expressMiddleware(server)));
+          
+   
+    app.get("/health",(_req,res)=>{
+        res.json({"result":"Ok"})
+    })
 
-    const {url} = await startStandaloneServer(server,{listen:{port:4000}})
+    const PORT = 4000
+    app.listen(PORT,()=>{
+        console.log("Server is running on Port 4000 and /graphql")
+        console.log("Server is running on Port 4000 and /health")
+    })
+    
 
-    console.log(`Server is listing at ${url}`)
+ 
 
 
 }
-bootStrap().catch(err=>{
+start().catch(err=>{
     console.error(`Something Went Wrong ${err}`);
     process.exit(1);
 });
