@@ -31,12 +31,12 @@ async function start() {
   await apollo.start();
 
   // ✅ HTTP GraphQL (Queries/Mutations) — fresh loaders each request
-  app.use(
-    "/graphql",
-    expressMiddleware(apollo, {
-      context: async () => buildContext(),
-    })
-  );
+ app.use(
+  "/graphql",
+  expressMiddleware(apollo, {
+    context: async ({ req }) => await buildContext({ authorization: req.headers.authorization }),
+  })
+);
 
   const httpServer = createServer(app);
 
