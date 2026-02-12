@@ -57,13 +57,33 @@ npm install -D typescript ts-node-dev @types/node @types/express @types/cors
 
 ------------------------------------------------------------------------
 
-# ⚙️ Step 3 --- TypeScript Setup
+# ⚙️ Step 3 --- Configure package.json Scripts
+
+Open `package.json` and update the `"scripts"` section to:
+
+``` json
+"scripts": {
+  "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+  "build": "tsc",
+  "start": "node dist/index.js"
+}
+```
+
+Explanation:
+
+-   **dev** → Runs project in development mode with auto-restart
+-   **build** → Compiles TypeScript into `/dist`
+-   **start** → Runs compiled production build
+
+------------------------------------------------------------------------
+
+# ⚙️ Step 4 --- TypeScript Setup
 
 ``` bash
 npx tsc --init
 ```
 
-Update tsconfig.json:
+Update `tsconfig.json`:
 
 ``` json
 {
@@ -82,7 +102,7 @@ Update tsconfig.json:
 
 ------------------------------------------------------------------------
 
-# 📁 Step 4 --- Project Structure
+# 📁 Step 5 --- Project Structure
 
     src/
       index.ts
@@ -261,15 +281,20 @@ start().catch(console.error);
 
 ------------------------------------------------------------------------
 
-# ▶️ Run
+# ▶️ Run Project
+
+Development mode:
 
 ``` bash
 npm run dev
 ```
 
-Open:
+Production build:
 
-http://localhost:4000/graphql
+``` bash
+npm run build
+npm start
+```
 
 ------------------------------------------------------------------------
 
@@ -308,6 +333,7 @@ query {
 You now understand:
 
 -   Express + Apollo integration
+-   package.json script setup
 -   Basic GraphQL schema
 -   Resolver basics
 -   Schema stitching
