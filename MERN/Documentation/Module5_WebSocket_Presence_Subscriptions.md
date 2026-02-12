@@ -1,9 +1,9 @@
 
-# Module 4 (Practical) — WebSocket Setup + Presence Updates (GraphQL Subscriptions)
+# Module 5 (Practical) — WebSocket Setup + Presence Updates (GraphQL Subscriptions)
 
 This module continues the **same Ecommerce Cart GraphQL project** and adds **real-time** features:
 
-✅ Module 4 focus:
+✅ Module 5 focus:
 - Add **GraphQL Subscriptions** over **WebSocket**
 - Implement a simple **presence system** (user online/offline + heartbeat)
 - Keep it practical and incremental
@@ -56,6 +56,8 @@ Avoid subscriptions when:
 
 ```bash
 npm install ws graphql-ws
+npm install -D @types/node @types/express 
+@types/ws
 ```
 
 ---
@@ -100,6 +102,85 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+let cleanupTimer: NodeJS.Timeout | null = null;
+
+export const presenceResolvers = {
+  Query: {
+    onlineUsers: () => Array.from(onlineMap.keys()),
+  },
+
+  Subscription: {
+    presenceUpdates: {
+      subscribe: (_: unknown, __: unknown, ctx: GraphQLContext) => {
+        return ctx.pubsub.asyncIterator("PRESENCE_UPDATES");
+      },
+      resolve: (payload: any) => payload.presenceUpdates,
+    },
+  },
+};
+
+// ✅ IMPORTANT: Export helpers separately (NOT inside resolvers)
+export const presenceInternal = {
+  startCleanup(pubsub: GraphQLContext["pubsub"]) {
+    if (cleanupTimer) return;
+
+    cleanupTimer = setInterval(() => {
+      const now = Date.now();
+      const thresholdMs = 30_000;
+
+      for (const [userId, lastSeen] of onlineMap.entries()) {
+        if (now - lastSeen > thresholdMs) {
+          onlineMap.delete(userId);
+
+          pubsub.publish("PRESENCE_UPDATES", {
+            presenceUpdates: {
+              userId,
+              status: "OFFLINE",
+              lastSeenAt: nowIso(),
+            },
+          });
+        }
+      }
+    }, 10_000);
+  },
+
+  stopCleanup() {
+    if (cleanupTimer) clearInterval(cleanupTimer);
+    cleanupTimer = null;
+  },
+
+  setOnline(userId: string, pubsub: GraphQLContext["pubsub"]) {
+    onlineMap.set(userId, Date.now());
+    pubsub.publish("PRESENCE_UPDATES", {
+      presenceUpdates: { userId, status: "ONLINE", lastSeenAt: nowIso() },
+    });
+  },
+
+  setOffline(userId: string, pubsub: GraphQLContext["pubsub"]) {
+    onlineMap.delete(userId);
+    pubsub.publish("PRESENCE_UPDATES", {
+      presenceUpdates: { userId, status: "OFFLINE", lastSeenAt: nowIso() },
+    });
+  },
+
+  heartbeat(userId: string) {
+    if (onlineMap.has(userId)) onlineMap.set(userId, Date.now());
+  },
+};
+```
+ts
+import type { GraphQLContext } from "../context";
+
+// In-memory presence state
+const onlineMap = new Map<string, number>(); // userId -> lastSeenAt (epoch ms)
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+// ✅ Keep only ONE cleanup timer (important in dev hot-reload)
+let cleanupTimer: NodeJS.Timeout | null = null;
+
 export const presenceResolvers = {
   Query: {
     onlineUsers: () => Array.from(onlineMap.keys()),
@@ -111,11 +192,44 @@ export const presenceResolvers = {
       subscribe: (_: unknown, __: unknown, ctx: GraphQLContext) => {
         return ctx.pubsub.asyncIterator("PRESENCE_UPDATES");
       },
+
+      // ✅ Ensure correct payload shape for the Subscription field
+      resolve: (payload: any) => payload.presenceUpdates,
     },
   },
 
   // helper exports for server WS hooks (we will call these from index.ts)
   __internal: {
+    // ✅ Call this ONCE from index.ts after PubSub is created
+    startCleanup(pubsub: GraphQLContext["pubsub"]) {
+      if (cleanupTimer) return; // already running
+
+      cleanupTimer = setInterval(() => {
+        const now = Date.now();
+        const thresholdMs = 30_000; // 30s offline threshold (demo)
+
+        for (const [userId, lastSeen] of onlineMap.entries()) {
+          if (now - lastSeen > thresholdMs) {
+            onlineMap.delete(userId);
+
+            // ✅ Publish OFFLINE when auto-expiring users
+            pubsub.publish("PRESENCE_UPDATES", {
+              presenceUpdates: {
+                userId,
+                status: "OFFLINE",
+                lastSeenAt: nowIso(),
+              },
+            });
+          }
+        }
+      }, 10_000);
+    },
+
+    stopCleanup() {
+      if (cleanupTimer) clearInterval(cleanupTimer);
+      cleanupTimer = null;
+    },
+
     setOnline(userId: string, pubsub: GraphQLContext["pubsub"]) {
       onlineMap.set(userId, Date.now());
       pubsub.publish("PRESENCE_UPDATES", {
@@ -220,7 +334,7 @@ export class SimplePubSub {
 
 # D) Update Context to include PubSub + Loaders
 
-We already created `context.ts` in Module 3 for DataLoader.
+We already created `context.ts` in Module 4 for DataLoader.
 Now we will add `pubsub` to it.
 
 ## Update `src/context.ts`
@@ -295,7 +409,7 @@ import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@as-integrations/express5";
 
 import { WebSocketServer } from "ws";
-import { useServer } from "graphql-ws/lib/use/ws";
+import { useServer } from "graphql-ws/use/ws";
 
 import { stitchedSchema } from "./stitching/stitchedSchema";
 import { buildContext, getPubSub } from "./context";
@@ -341,6 +455,9 @@ async function start() {
         const userId = parseUserIdFromConnectionParams(ctx.connectionParams);
         const baseCtx = buildContext();
         const pubsub = getPubSub();
+
+        // ✅ Start presence auto-offline cleanup (once per process)
+        (presenceResolvers as any).__internal.startCleanup(pubsub);
 
         // presence connect
         if (userId) {
@@ -390,22 +507,13 @@ Use a heartbeat + cleanup loop.
 - Server marks `lastSeenAt`
 - Server cleanup loop removes users idle > threshold and publishes OFFLINE
 
-Add this to `src/presence/resolvers.ts` (near the top):
+Instead of a top-level `setInterval` (which can’t publish OFFLINE because it lacks `pubsub`), we start a cleanup loop via `presenceResolvers.__internal.startCleanup(pubsub)` from `index.ts`.
 
-```ts
-setInterval(() => {
-  const now = Date.now();
-  const thresholdMs = 30_000; // 30s offline threshold (demo)
+✅ This cleanup loop:
+- expires idle users (no heartbeat)
+- publishes `OFFLINE` via PubSub
+- avoids duplicate intervals during dev hot-reload
 
-  for (const [userId, lastSeen] of onlineMap.entries()) {
-    if (now - lastSeen > thresholdMs) {
-      onlineMap.delete(userId);
-      // publish offline
-      // (we need pubsub; for simplicity we skip publishing here)
-    }
-  }
-}, 10_000);
-```
 
 ✅ In production, you’d publish OFFLINE via Redis-based pubsub
 and track sockets precisely. For now, this is enough to understand the system.
