@@ -1,6 +1,6 @@
 type CartItem = { productId: string; quantity: number };
 import { getProductById } from "../catalog/store";
-
+import type { GraphQLContext } from "../context";
 
 type Cart = { id: string; items: CartItem[] };
 
@@ -24,13 +24,15 @@ export const cartResolvers = {
   Query: {
     cart: (_: unknown, args: { cartId: string }) =>
       getOrCreateCart(args.cartId),
+  },CartItem: {
+    product: (
+      parent: { productId: string },
+      _: unknown,
+      ctx: GraphQLContext
+    ) => {
+      return ctx.loaders.productLoader.load(parent.productId);
+    },
   },
-  CartItem: {
-  product: (parent: { productId: string }) => {
-    return getProductById(parent.productId);
-  }
-},
-
   Mutation: {
     addToCart: (
       _: unknown,

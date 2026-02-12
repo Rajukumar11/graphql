@@ -1,7 +1,7 @@
 import express from "express";
 import cors from "cors";
 import bodyParser from "body-parser";
-
+import { buildContext } from "./context";
 import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@as-integrations/express5";
 import { stitchedSchema } from "./stitching/stitchedSchema";
@@ -16,8 +16,9 @@ async function start() {
   });
 
   await server.start();
-
-  app.use("/graphql", expressMiddleware(server));
+  app.use("/graphql", expressMiddleware(server, {
+  context: async () => buildContext(),
+}));
 
   const port = 4000;
   app.listen(port, () => {
