@@ -1,7 +1,15 @@
 type CartItem = { productId: string; quantity: number };
+import { getProductById } from "../catalog/store";
+
+
 type Cart = { id: string; items: CartItem[] };
 
 const carts = new Map<string, Cart>();
+
+
+
+
+
 
 function getOrCreateCart(cartId: string): Cart {
   const existing = carts.get(cartId);
@@ -17,6 +25,11 @@ export const cartResolvers = {
     cart: (_: unknown, args: { cartId: string }) =>
       getOrCreateCart(args.cartId),
   },
+  CartItem: {
+  product: (parent: { productId: string }) => {
+    return getProductById(parent.productId);
+  }
+},
 
   Mutation: {
     addToCart: (
