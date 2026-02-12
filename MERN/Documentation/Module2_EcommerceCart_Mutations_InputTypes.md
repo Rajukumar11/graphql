@@ -1,40 +1,44 @@
+# Module 2 (Practical) --- Mutations + Input Types
 
-# Module 2 (Practical) — Ecommerce Cart: Mutations + Input Types (Simple)
+## Ecommerce Cart (Incremental Project)
 
-This module continues the **same project** from Module 1 (Express + Schema stitching).
+This module builds on Module 1 (Express + Schema Stitching).
 
-✅ Module 2 focus:
-- Add **Mutation** operations for Cart
-- Use **Input Types** (best practice for clean APIs)
-- Keep everything **simple + in-memory**
-- No auth, no DB, no DataLoader yet
+Focus: - Add Mutations - Use Input Types - Keep implementation simple
+(in-memory) - No DB, No Auth yet
 
----
+------------------------------------------------------------------------
 
-## What / Why / When (Quick)
+# 1️⃣ WHAT We Add
 
-### WHAT are we adding?
-We add write operations:
-- `addToCart(input: AddToCartInput!): Cart!`
-- `removeFromCart(input: RemoveFromCartInput!): Cart!`
-- `clearCart(cartId: ID!): Cart!`
+New Mutations:
 
-### WHY use input types?
-- Cleaner schema (one argument instead of many)
-- Easier to extend later (add fields without breaking clients)
-- Better validation structure
+-   addToCart(input: AddToCartInput!): Cart!
+-   removeFromCart(input: RemoveFromCartInput!): Cart!
+-   clearCart(input: ClearCartInput!): Cart!
 
-### WHEN should you use input types?
-Almost always for mutations in production.
+------------------------------------------------------------------------
 
----
+# 2️⃣ WHY Use Input Types?
 
-# A) Update Cart Schema (Input Types + Mutations)
+Instead of:
 
-## 1) Update `src/cart/typeDefs.ts`
-Replace your file with:
+addToCart(cartId: ID!, productId: ID!, quantity: Int!)
 
-```ts
+We use:
+
+addToCart(input: AddToCartInput!)
+
+Benefits: - Cleaner schema - Easier to extend later - Standard
+production practice
+
+------------------------------------------------------------------------
+
+# 3️⃣ Update src/cart/typeDefs.ts
+
+Replace entire file with:
+
+``` ts
 export const cartTypeDefs = `#graphql
   type CartItem {
     productId: ID!
@@ -57,6 +61,10 @@ export const cartTypeDefs = `#graphql
     productId: ID!
   }
 
+  input ClearCartInput {
+    cartId: ID!
+  }
+
   type Query {
     cart(cartId: ID!): Cart!
   }
@@ -64,24 +72,18 @@ export const cartTypeDefs = `#graphql
   type Mutation {
     addToCart(input: AddToCartInput!): Cart!
     removeFromCart(input: RemoveFromCartInput!): Cart!
-    clearCart(cartId: ID!): Cart!
+    clearCart(input: ClearCartInput!): Cart!
   }
 `;
 ```
 
-✅ What changed:
-- Added `input AddToCartInput`
-- Added `input RemoveFromCartInput`
-- Added `type Mutation`
+------------------------------------------------------------------------
 
----
+# 4️⃣ Update src/cart/resolvers.ts
 
-# B) Update Cart Resolvers (Implement Mutations)
+Replace entire file with:
 
-## 1) Update `src/cart/resolvers.ts`
-Replace your file with:
-
-```ts
+``` ts
 type CartItem = { productId: string; quantity: number };
 type Cart = { id: string; items: CartItem[] };
 
@@ -96,12 +98,10 @@ function getOrCreateCart(cartId: string): Cart {
   return created;
 }
 
-// Module 2: pre-seed one cart for testing
-getOrCreateCart("c1").items.push({ productId: "p1", quantity: 2 });
-
 export const cartResolvers = {
   Query: {
-    cart: (_: unknown, args: { cartId: string }) => getOrCreateCart(args.cartId),
+    cart: (_: unknown, args: { cartId: string }) =>
+      getOrCreateCart(args.cartId),
   },
 
   Mutation: {
@@ -110,12 +110,10 @@ export const cartResolvers = {
       args: { input: { cartId: string; productId: string; quantity: number } }
     ) => {
       const { cartId, productId } = args.input;
-
-      // Basic input guard: quantity must be >= 1
       const quantity = Math.max(1, args.input.quantity);
 
       const cart = getOrCreateCart(cartId);
-      const item = cart.items.find((i) => i.productId === productId);
+      const item = cart.items.find(i => i.productId === productId);
 
       if (item) item.quantity += quantity;
       else cart.items.push({ productId, quantity });
@@ -130,12 +128,17 @@ export const cartResolvers = {
       const { cartId, productId } = args.input;
       const cart = getOrCreateCart(cartId);
 
-      cart.items = cart.items.filter((i) => i.productId !== productId);
+      cart.items = cart.items.filter(i => i.productId !== productId);
       return cart;
     },
 
-    clearCart: (_: unknown, args: { cartId: string }) => {
-      const cart = getOrCreateCart(args.cartId);
+    clearCart: (
+      _: unknown,
+      args: { input: { cartId: string } }
+    ) => {
+      const { cartId } = args.input;
+      const cart = getOrCreateCart(cartId);
+
       cart.items = [];
       return cart;
     },
@@ -143,126 +146,71 @@ export const cartResolvers = {
 };
 ```
 
-✅ What changed:
-- Added `Mutation` object
-- Implemented 3 mutations
-- Used input objects for add/remove
+------------------------------------------------------------------------
 
----
+# 5️⃣ Stitching Reminder
 
-# C) Stitching (No Change)
+Ensure src/stitching/stitchedSchema.ts includes:
 
-✅ You do NOT change stitching.
-Your `stitchedSchema` automatically merges the new `Mutation` type from Cart schema.
+``` ts
+export const stitchedSchema = stitchSchemas({
+  subschemas: [catalogSchema, cartSchema],
+});
+```
 
----
+------------------------------------------------------------------------
 
-# D) Run Module 2
+# 6️⃣ Run Project
 
-```bash
+``` bash
 npm run dev
 ```
 
-Open:
-- `http://localhost:4000/graphql`
+------------------------------------------------------------------------
 
----
+# 7️⃣ Test Mutations
 
-# E) Test Queries & Mutations (Copy-Paste)
+Add item:
 
-## 1) Query products (Catalog)
-```graphql
-query {
-  products {
-    id
-    title
-    price
-  }
-}
-```
-
-## 2) Query cart
-```graphql
-query {
-  cart(cartId: "c1") {
-    id
-    items {
-      productId
-      quantity
-    }
-  }
-}
-```
-
-## 3) Add to cart (Mutation + Input Type)
-```graphql
+``` graphql
 mutation {
-  addToCart(input: { cartId: "c1", productId: "p2", quantity: 1 }) {
+  addToCart(input: { cartId: "c1", productId: "p1", quantity: 2 }) {
     id
-    items {
-      productId
-      quantity
-    }
+    items { productId quantity }
   }
 }
 ```
 
-## 4) Remove from cart
-```graphql
+Remove item:
+
+``` graphql
 mutation {
   removeFromCart(input: { cartId: "c1", productId: "p1" }) {
     id
-    items {
-      productId
-      quantity
-    }
+    items { productId quantity }
   }
 }
 ```
 
-## 5) Clear cart
-```graphql
+Clear cart:
+
+``` graphql
 mutation {
-  clearCart(cartId: "c1") {
+  clearCart(input: { cartId: "c1" }) {
     id
-    items {
-      productId
-      quantity
-    }
+    items { productId quantity }
   }
 }
 ```
 
----
+------------------------------------------------------------------------
 
-# Common Mistakes (Fast Fix)
+# ✅ Module 2 Complete
 
-### ❌ “Cannot query field Mutation”
-This means your schema still doesn’t include Mutation.
-- Ensure you updated `cart/typeDefs.ts`
-- Restart dev server (`Ctrl+C` then `npm run dev`)
+You now understand:
 
-### ❌ Passing wrong input shape
-Correct:
-```graphql
-addToCart(input: { cartId: "c1", productId: "p2", quantity: 1 })
-```
-
-Wrong:
-```graphql
-addToCart(cartId: "c1", productId: "p2", quantity: 1)
-```
-
----
-
-# Module 2 Complete ✅
-
-You now have:
-- Express + Apollo running
-- Stitched schema (Catalog + Cart)
-- Mutations added safely
-- Input types introduced
-
-Next module preview:
-- Add `CartItem.product: Product!` (link Cart → Catalog)
-- Then fix N+1 using DataLoader
+-   Mutation root type
+-   Input types
+-   Clean argument modeling
+-   In-memory cart logic
+-   Proper GraphQL mutation execution
