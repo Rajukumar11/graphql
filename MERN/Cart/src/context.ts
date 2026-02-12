@@ -1,24 +1,34 @@
 import DataLoader from "dataloader";
-import { getProductsByIds } from "./catalog/store";
+import type { Db } from "mongodb";
+import { getDb } from "./db/mongo";
 import { SimplePubSub } from "./pubsub";
 
 export type GraphQLContext = {
+  db: Db;
   loaders: {
     productLoader: DataLoader<string, any>;
   };
   pubsub: SimplePubSub;
+  userId?: string;
 };
 
-// IMPORTANT: PubSub should be shared for the whole server process
-// so all requests + WS connections publish to the same event bus.
 const pubsubSingleton = new SimplePubSub();
 
-export function buildContext(): GraphQLContext {
+export async function buildContext(): Promise<GraphQLContext> {
+  const db = await getDb();
+
   const productLoader = new DataLoader<string, any>(async (ids) => {
-    return getProductsByIds(ids);
+    const rows = await db
+      .collection("products")
+      .find({ _id: { $in: ids as any } })
+      .toArray();
+
+    const map = new Map(rows.map((r: any) => [r._id, r]));
+    return ids.map((id) => map.get(id) ?? null);
   });
 
   return {
+    db,
     loaders: { productLoader },
     pubsub: pubsubSingleton,
   };

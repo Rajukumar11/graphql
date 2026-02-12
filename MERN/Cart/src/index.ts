@@ -8,12 +8,12 @@ import { expressMiddleware } from "@as-integrations/express5";
 
 import { WebSocketServer } from "ws";
 import { useServer } from "graphql-ws/use/ws";
-
+import dotenv from 'dotenv'
 import { stitchedSchema } from "./stitching/stitchedSchema";
 import { buildContext, getPubSub } from "./context";
 
 import { presenceResolvers, presenceInternal } from "./presence/resolvers";
-
+dotenv.config();
 function parseUserIdFromConnectionParams(params: any): string | null {
   const userId = params?.userId;
   return typeof userId === "string" && userId.trim() ? userId.trim() : null;
@@ -92,7 +92,7 @@ async function start() {
     wsServer
   );
 
-  const port = 4000;
+  const port = process.env.PORT||5000;
   httpServer.listen(port, () => {
     console.log(`🚀 HTTP GraphQL: http://localhost:${port}/graphql`);
     console.log(`🔌 WS GraphQL:   ws://localhost:${port}/graphql`);
