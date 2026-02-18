@@ -5,7 +5,8 @@ import { createServer } from "http";
 
 import { ApolloServer } from "@apollo/server";
 import { expressMiddleware } from "@as-integrations/express5";
-
+import { normalizeFormattedError } from "./errors/normalizeError";
+import { tracingPlugin } from "./errors/tracingPlugin";
 import { WebSocketServer } from "ws";
 import { useServer } from "graphql-ws/use/ws";
 import dotenv from 'dotenv'
@@ -25,8 +26,23 @@ async function start() {
   app.use(bodyParser.json());
 
   const apollo = new ApolloServer({
-    schema: stitchedSchema,
-  });
+  schema: stitchedSchema,
+  plugins: [tracingPlugin()],
+
+  formatError: (formattedError, error) => {
+    // traceId from plugin via context, fallback if missing
+    const traceId =
+      (error?.path && (error as any)?.originalError?.extensions?.traceId) ||
+      (error as any)?.extensions?.traceId ||
+      "trace-missing";
+
+    // Always log full internal error on server:
+    console.error("GraphQL Error:", { traceId, error });
+
+    // Return masked/normalized error to client
+    return normalizeFormattedError(formattedError, traceId);
+  },
+});
 
   await apollo.start();
 
