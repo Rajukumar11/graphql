@@ -4,6 +4,7 @@ type Cart = { id: string; items: CartItem[], price: string, Quantity: number,pub
 
 const carts = new Map<string, Cart>();
 
+
 carts.set("c1", {
   id: "c1",
   items: [{ productId: "p1", quantity: 2}],
