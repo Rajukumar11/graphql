@@ -35,7 +35,7 @@ carts.set("c3", {
   price: "30",
   Quantity: 3,
   publicationDate: "02/11/2026",
-  author: "Roshan",
+  author: "Bollywood",
   edition: "E12",
   publisher: "Null 2"
 });
@@ -47,11 +47,14 @@ export const cartResolvers = {
     },
       cartbyprice: (_: unknown, args: { cartId: string, price: string}) => {
       let cart = carts.get(args.cartId);
-      let result = cart && cart.price=="30";
-      return result ?? { id: args.cartId, items: [] };
+      let result = cart && cart.price== args.price ? cart : { id: args.cartId, items: [] };
+      return result; 
     },
-      cartbyauthor: (_: unknown, args: { cartId: string, author: string}) => {
-      return carts.get(args.cartId) ?? { id: args.cartId, items: [] };
-    },
+    // cartbyauthor: (_: unknown, args: { cartId: string, author: string}) => {
+    //   let cart = carts.get(args.cartId);
+    //   let result = cart && cart.author== args.author ? cart : { id: args.cartId, items: [] };
+    //   return result; 
+
+    // },
   },
 }
